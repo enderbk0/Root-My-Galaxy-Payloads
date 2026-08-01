@@ -1,5 +1,5 @@
 API ?= 35
-TARGET ?= pa3q-S938NKSUACZF1
+TARGET ?= parrotp-A366BXXSACZF1
 OUTDIR ?= build/$(TARGET)
 
 TARGET_HEADER := src/targets/$(TARGET)/target.h

