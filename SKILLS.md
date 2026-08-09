@@ -184,13 +184,18 @@ make TARGET=essi-S721NKSSCDZF3 ANDROID_NDK_HOME=/path/to/android-ndk release  # 
 - `APP_PAYLOAD=1` compiles the app-side (physical-P0 oracle) variant.
 - Known supported targets (kernel versions): S25 series 6.6.98 (device-tested),
   S24 Ultra 6.1.145 (in progress), S24+ 6.1.157 (tested), A56 6.6.102 (tested),
-  A36 6.6.46 (tested), A36 SM-A366B 6.6.98 (port complete, awaiting device
-  validation; see `docs/SM-A366B-A366BXXSACZF1.md`), S23 Ultra 5.15.189
+  A36 6.6.46 (tested), A36 SM-A366B 6.6.98 (device-tested; see
+  `docs/SM-A366B-A366BXXSACZF1.md`), S23 Ultra 5.15.189
   (in progress), A15 5.10.226, S24/S24FE 6.1.
 - A36B CZF1 port facts: kernel `6.6.98-android15-8-33419078-abogkiA366BXXSACZF1-4k`
   (same GKI sublevel as S25/Z Fold 7 6.6.98); Image mapping
   `VA = 0xffffffc080000000 + (boot.img_offset - 0x1000)`; slide params
   `EVENT_ID 109`, `WORKER_CALLER_OFF 0x000d98e4`, `PSELECT_WORD_SHIFT 0`.
+- Device-validated 2026-08-09: physical oracle derived slide 0 (base
+  `ffffffc080000000`) on first attempt; second attempt completed the fops
+  slide, CFI stage, pipe physrw and usermodehelper root (`uid=2000->0`,
+  exit 0). Run via `cve-2026-43499-root --run-payload` (dlopen, detached
+  session, live-streamed log) - not via `LD_PRELOAD` on a toybox process.
 
 ## KernelSU notes
 

@@ -111,12 +111,51 @@ when the BL archive is available, per `docs/PORTING.md` section 4.
 
 ## Status
 
+- **Device-tested** on a real `SM-A366B` (Android 16) running the exact
+  firmware `A366BXXSACZF1`, kernel `6.6.98-android15-8-33419078-abogkiA366BXXSACZF1-4k`.
 - `make TARGET=a36xq-A366BXXSACZF1 ANDROID_NDK_HOME=...` builds all three
   binaries and the 104128-byte release app payload.
 - `p0_fingerprint.h` was generated from the exact Image at probe
   `0x1f0000`; the generator verified all 32 rows / 256 source qwords.
 - KernelSU late-load artifacts for this exact vermagic require building from
   the Samsung `android15-6.6` sources; not produced from the AP alone.
-- Not yet device-tested. This profile is exact-build support for
+- This profile is exact-build support for
   `SM-A366B`/`A366BXXSACZF1` and claims no compatibility with other Galaxy
   A36 models, firmware, or kernel releases.
+
+## Validation
+
+Run via the root helper runner:
+
+```sh
+adb push build/a36xq-A366BXXSACZF1/cve-2026-43499-root /data/local/tmp/
+adb push build/a36xq-A366BXXSACZF1/cve-2026-43499-app.so /data/local/tmp/
+adb shell "cd /data/local/tmp && ./cve-2026-43499-root --run-payload \
+  ./cve-2026-43499-app.so ./cve-2026-43499-root ./cve-2026-43499.log"
+```
+
+Live log is streamed by the runner; the payload session detaches so loss of
+the adb shell cannot kill the run.
+
+First validation run, 2026-08-09 (full log preserved alongside this record):
+
+- Attempt 1: p0 physical KASLR oracle derived `base=ffffffc080000000
+  slide=0000000000000000` (matches the static derivation exactly), with
+  all four slot writes and the boot-id fingerprint sampling succeeding.
+  The app-fops write window then missed (`p0 physical write status=256`),
+  attempt failed cleanly with the pipe oracle restored.
+- Attempt 2 (supervisor retained `p0_offset=0x0` and the session page
+  structs): fops slide triggered, CFI stage passed (`cfi write/read`),
+  misc_fops restored to `ffffffe4bdffad80` (ashmem_fops), pipe physrw
+  established, `read64`/`write64` verified, usermodehelper work queued and
+  completed (`retval=0 socket=1`), and the payload process reached
+  `uid=2000->0`.
+- Summary: `pipe-physrw-summary done=1 root=1 kaslr=1 rw64=1/1`; stability
+  keeper spawned retaining reclaimed kernel pages; runner exit `0x0`.
+- Kernel config cross-checked against the embedded `target.config`
+  (`IKCONFIG_PROC` on the device confirmed ASHMEM, NETFILTER_NETLINK_LOG,
+  CONFIGFS_FS): `CONFIG_RKP=y`, `CONFIG_KDP=y`, `CONFIG_UH=y`, DEFEX,
+  `CFI_CLANG=y` with `LTO_NONE=y`, PAC/BTI/SCS all active; the
+  data-only/call_usermodehelper route does not touch RKP stage-2 protected
+  pages (text, cred, selinux state, page tables), so no mitigation blocked
+  the run.
